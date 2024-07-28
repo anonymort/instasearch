@@ -20,8 +20,8 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 8. Download the ZIP file and extract the contents.
 9. Look for HTML files related to your messages in the extracted folder.
 
-## How to Use the Instagram Message Search Tool
-1. Visit the tool's website: [Your hosted website URL]
+## How to Use Instasearch
+1. Download locally (for now). Open the index.html.
 2. Click the "Choose Files" button and select the Instagram message HTML files you downloaded, or drag and drop the files onto the page. You can select multiple HTML files at once.
 3. Wait for the files to be processed (this happens locally in your browser).
 4. Use the search bar to search for specific words or phrases in your messages.
