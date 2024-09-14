@@ -3,32 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instasearch (v1.0)</title>
-    <link rel="stylesheet" href="style.css">
+    <title>InstaSearch v2.0</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>Instasearch (v1.0)</h1>
-    <p id="disclaimer" style="text-align: center; font-style: italic; margin-bottom: 20px;">
-        All processing is done locally in your browser. No data is uploaded to any server.
-    </p>
-    <div class="input-group">
-        <button id="darkModeToggle">Toggle Dark Mode</button>
-        <input type="file" id="fileInput" multiple accept=".html">
-        <input type="text" id="searchInput" placeholder="Search messages...">
-        <button id="clearSearch">Clear Search</button>
-    </div>
-    <div id="searchStats"></div>
-    <div id="status"></div>
-    <div id="loadingIndicator">Searching...</div>
-    <div id="results"></div>
-
-    <div id="contextModal" class="modal">
+    <section class="section">
+        <div class="container">
+            <h1 class="title">InstaSearch (v2.0)</h1>
+            <p class="has-text-centered is-italic mb-5">
+                All processing is done locally in your browser. No data is uploaded to any server.
+            </p>
+            <div class="buttons is-centered mb-5">
+                <button id="darkModeToggle" class="button is-light">
+                    <span class="icon"><i class="fas fa-moon"></i></span>
+                    <span>Dark Mode</span>
+                </button>
+            </div>
+            <div class="field">
+                <div class="file is-boxed is-fullwidth" id="fileDropZone">
+                    <label class="file-label">
+                        <input class="file-input" type="file" id="fileInput" multiple accept=".html">
+                        <span class="file-cta">
+                            <span class="file-icon">
+                                <i class="fas fa-upload"></i>
+                            </span>
+                            <span class="file-label">
+                                Drag & Drop HTML Files or Click to Upload
+                            </span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            <div class="field has-addons">
+                <div class="control is-expanded">
+                    <input class="input" type="text" id="searchInput" placeholder="Search messages...">
+                </div>
+                <div class="control">
+                    <button class="button is-info" id="clearSearch">
+                        <span class="icon"><i class="fas fa-times"></i></span>
+                        <span>Clear</span>
+                    </button>
+                </div>
+            </div>
+            <div id="searchStats" class="has-text-centered mt-2"></div>
+            <div id="status" class="mt-3"></div>
+            <div id="loadingIndicator" class="has-text-centered mt-3" style="display: none;">
+                <button class="button is-loading is-light is-large">Searching...</button>
+            </div>
+            <div id="results" class="mt-5"></div>
+        </div>
+    </section>
+    <div class="modal" id="contextModal">
+        <div class="modal-background"></div>
         <div class="modal-content">
-            <span class="close">&times;</span>
+            <button class="delete" aria-label="close" id="closeModal"></button>
             <div id="contextMessages"></div>
         </div>
+        <button class="modal-close is-large" aria-label="close" id="closeModalBackground"></button>
     </div>
-
-    <script src="script.js"></script> 
+    <script src="script.js"></script>
 </body>
 </html>
