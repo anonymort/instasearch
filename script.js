@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileDropZone = document.getElementById('fileDropZone');
     let worker;
     let fullMessageList = [];
+    let messageIdCounter = 0;
 
     // Initialize logging
     const log = (message, level = 'info') => {
@@ -66,26 +67,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function toggleDarkMode() {
         const body = document.body;
         const darkModeToggle = document.getElementById('darkModeToggle');
-        
+
         body.classList.toggle('dark-mode');
-        
+
         if (body.classList.contains('dark-mode')) {
             darkModeToggle.innerHTML = '<span class="icon"><i class="fas fa-sun"></i></span><span>Light Mode</span>';
-            localStorage.setItem('theme', 'dark');
+            localStorage.setItem('darkMode', 'enabled');
         } else {
             darkModeToggle.innerHTML = '<span class="icon"><i class="fas fa-moon"></i></span><span>Dark Mode</span>';
-            localStorage.setItem('theme', 'light');
+            localStorage.setItem('darkMode', 'disabled');
         }
     }
-
-    // Apply the saved theme on page load
-    document.addEventListener('DOMContentLoaded', () => {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme === 'dark') {
-            document.body.classList.add('dark-mode');
-            document.getElementById('darkModeToggle').innerHTML = '<span class="icon"><i class="fas fa-sun"></i></span><span>Light Mode</span>';
-        }
-    });
 
     // Create Web Worker
     function createWorker() {
@@ -143,8 +135,12 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         `;
         const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const blobURL = URL.createObjectURL(blob);
+        const worker = new Worker(blobURL);
+        // Revoke the blob URL to prevent memory leak
+        URL.revokeObjectURL(blobURL);
         log('Web Worker created successfully');
-        return new Worker(URL.createObjectURL(blob));
+        return worker;
     }
 
     // Handle File Input Change
@@ -265,19 +261,27 @@ document.addEventListener('DOMContentLoaded', () => {
         let totalMessages = 0;
 
         for (let file of files) {
+            let messages = [];
             try {
                 log(`Processing file: ${file.name}`);
                 const text = await file.text();
-                const messages = processHTML(text);
+                messages = processHTML(text);
                 log(`Extracted ${messages.length} messages from ${file.name}`);
+
+                // Send to worker first, then update local list on success
+                worker.postMessage({ type: 'addMessages', messages });
                 fullMessageList = fullMessageList.concat(messages);
                 totalMessages += messages.length;
-                worker.postMessage({ type: 'addMessages', messages });
                 processedFiles++;
             } catch (error) {
                 log(`Error processing ${file.name}: ${error.message}`, 'error');
                 console.error(`Error processing ${file.name}:`, error);
                 addNotification(`Error processing ${file.name}: ${error.message}`, 'is-danger');
+
+                // Rollback message IDs if processing failed
+                if (messages.length > 0) {
+                    messageIdCounter -= messages.length;
+                }
             }
         }
 
@@ -294,12 +298,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const doc = parser.parseFromString(html, 'text/html');
         const messageDivs = doc.querySelectorAll('.pam._3-95._2ph-._a6-g');
 
-        const messages = Array.from(messageDivs).map((div, index) => {
+        const messages = Array.from(messageDivs).map((div) => {
             const senderElement = div.querySelector('._a6-h');
             const contentElement = div.querySelector('._a6-p');
             const dateElement = div.querySelector('._a6-o');
             return {
-                id: fullMessageList.length + index,
+                id: messageIdCounter++,
                 sender: senderElement ? senderElement.textContent.trim() : '',
                 content: contentElement ? contentElement.textContent.trim() : '',
                 date: dateElement ? dateElement.textContent.trim() : ''
