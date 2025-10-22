@@ -28,11 +28,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initDarkMode();
 
     // Create Web Worker
-    worker = createWorker();
+    worker = new Worker('worker.js');
+    log('Web Worker created successfully');
 
     // Event Listeners
     fileInput.addEventListener('change', handleFileInput);
-    searchInput.addEventListener('input', debounce(handleSearchInput, 300));
+    searchInput.addEventListener('input', debounce(handleSearchInput, CONFIG.SEARCH_DEBOUNCE_MS));
     darkModeToggle.addEventListener('click', toggleDarkMode);
     clearSearchButton.addEventListener('click', clearSearch);
     closeModalButtons.forEach(button => button.addEventListener('click', closeModal));
@@ -49,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Dark Mode
     function initDarkMode() {
         log('Initializing dark mode');
-        const isDarkMode = localStorage.getItem('darkMode') === 'enabled';
+        const isDarkMode = localStorage.getItem(CONFIG.STORAGE_KEYS.DARK_MODE) === CONFIG.DARK_MODE.ENABLED;
         document.body.classList.toggle('dark-mode', isDarkMode);
         updateDarkModeButton(isDarkMode);
         log(`Dark mode initialized. Current state: ${isDarkMode ? 'enabled' : 'disabled'}`);
@@ -66,82 +67,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function toggleDarkMode() {
         const body = document.body;
-        const darkModeToggle = document.getElementById('darkModeToggle');
-
         body.classList.toggle('dark-mode');
 
         if (body.classList.contains('dark-mode')) {
-            darkModeToggle.innerHTML = '<span class="icon"><i class="fas fa-sun"></i></span><span>Light Mode</span>';
-            localStorage.setItem('darkMode', 'enabled');
+            updateDarkModeButton(true);
+            localStorage.setItem(CONFIG.STORAGE_KEYS.DARK_MODE, CONFIG.DARK_MODE.ENABLED);
         } else {
-            darkModeToggle.innerHTML = '<span class="icon"><i class="fas fa-moon"></i></span><span>Dark Mode</span>';
-            localStorage.setItem('darkMode', 'disabled');
+            updateDarkModeButton(false);
+            localStorage.setItem(CONFIG.STORAGE_KEYS.DARK_MODE, CONFIG.DARK_MODE.DISABLED);
         }
     }
 
-    // Create Web Worker
-    function createWorker() {
-        log('Creating Web Worker');
-        const workerCode = `
-            let messages = [];
-            let invertedIndex = {};
-
-            function updateInvertedIndex(message, index) {
-                const text = (message.sender + ' ' + message.content + ' ' + message.date).toLowerCase();
-                const words = text.split(/\\s+/);
-                words.forEach(word => {
-                    if (!invertedIndex[word]) {
-                        invertedIndex[word] = new Set();
-                    }
-                    invertedIndex[word].add(index);
-                });
-            }
-
-            function search(query) {
-                const startTime = performance.now();
-                const queryWords = query.toLowerCase().split(/\\s+/).filter(word => word);
-                if (queryWords.length === 0) return { results: [], searchTime: 0 };
-
-                let resultSet = null;
-                queryWords.forEach(word => {
-                    if (invertedIndex[word]) {
-                        if (resultSet === null) {
-                            resultSet = new Set(invertedIndex[word]);
-                        } else {
-                            resultSet = new Set([...resultSet].filter(x => invertedIndex[word].has(x)));
-                        }
-                    } else {
-                        resultSet = new Set();
-                    }
-                });
-
-                const results = resultSet ? Array.from(resultSet).map(index => messages[index]) : [];
-                const endTime = performance.now();
-                const searchTime = endTime - startTime;
-                return { results, searchTime };
-            }
-
-            self.onmessage = function(e) {
-                if (e.data.type === 'addMessages') {
-                    const newMessages = e.data.messages;
-                    const startIndex = messages.length;
-                    messages = messages.concat(newMessages);
-                    newMessages.forEach((message, i) => updateInvertedIndex(message, startIndex + i));
-                    self.postMessage({ type: 'processed', count: messages.length });
-                } else if (e.data.type === 'search') {
-                    const { results, searchTime } = search(e.data.query);
-                    self.postMessage({ type: 'searchResults', results, query: e.data.query, searchTime });
-                }
-            };
-        `;
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        const blobURL = URL.createObjectURL(blob);
-        const worker = new Worker(blobURL);
-        // Revoke the blob URL to prevent memory leak
-        URL.revokeObjectURL(blobURL);
-        log('Web Worker created successfully');
-        return worker;
-    }
 
     // Handle File Input Change
     function handleFileInput(event) {
@@ -241,11 +177,11 @@ document.addEventListener('DOMContentLoaded', () => {
         statusDiv.appendChild(notification);
         notification.style.display = 'block';
 
-        // Auto-dismiss after 5 seconds
+        // Auto-dismiss after configured timeout
         setTimeout(() => {
             notification.classList.add('is-hidden');
             notification.addEventListener('transitionend', () => notification.remove());
-        }, 5000);
+        }, CONFIG.NOTIFICATION_TIMEOUT_MS);
 
         // Dismiss on delete button click
         notification.querySelector('.delete').addEventListener('click', () => {
@@ -296,12 +232,12 @@ document.addEventListener('DOMContentLoaded', () => {
         log('Processing HTML content');
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        const messageDivs = doc.querySelectorAll('.pam._3-95._2ph-._a6-g');
+        const messageDivs = doc.querySelectorAll(CONFIG.SELECTORS.MESSAGE_DIVS);
 
         const messages = Array.from(messageDivs).map((div) => {
-            const senderElement = div.querySelector('._a6-h');
-            const contentElement = div.querySelector('._a6-p');
-            const dateElement = div.querySelector('._a6-o');
+            const senderElement = div.querySelector(CONFIG.SELECTORS.SENDER);
+            const contentElement = div.querySelector(CONFIG.SELECTORS.CONTENT);
+            const dateElement = div.querySelector(CONFIG.SELECTORS.DATE);
             return {
                 id: messageIdCounter++,
                 sender: senderElement ? senderElement.textContent.trim() : '',
@@ -353,8 +289,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const index = fullMessageList.findIndex(m => m.id === messageId);
         if (index === -1) return;
 
-        const start = Math.max(0, index - 10);
-        const end = Math.min(fullMessageList.length, index + 11);
+        const start = Math.max(0, index - CONFIG.CONTEXT_MESSAGES_BEFORE);
+        const end = Math.min(fullMessageList.length, index + CONFIG.CONTEXT_MESSAGES_AFTER + 1);
         const contextMessagesToShow = fullMessageList.slice(start, end);
 
         contextMessages.innerHTML = '';
