@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Configuration
+    const DEV_MODE = false; // Set to true for development logging
+    const RESULTS_PER_PAGE = 50; // Pagination limit
+    const MAX_NAME_LENGTH = 100; // Maximum display length for sender names
+
     // Variables and DOM Elements
     const statusDiv = document.getElementById('status');
     const fileInput = document.getElementById('fileInput');
@@ -15,12 +20,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let worker;
     let fullMessageList = [];
     let messageIdCounter = 0;
+    let currentPage = 0;
+    let currentResults = [];
+    let currentQuery = '';
 
-    // Initialize logging
-    const log = (message, level = 'info') => {
-        const timestamp = new Date().toISOString();
-        console[level](`[${timestamp}] ${message}`);
-    };
+    // Initialize logging (only in dev mode)
+    const log = DEV_MODE
+        ? (message, level = 'info') => {
+            const timestamp = new Date().toISOString();
+            console[level](`[${timestamp}] ${message}`);
+        }
+        : () => {}; // No-op in production
 
     log('Application initialized');
 
@@ -103,17 +113,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (queryWords.length === 0) return { results: [], searchTime: 0 };
 
                 let resultSet = null;
-                queryWords.forEach(word => {
+                for (const word of queryWords) {
                     if (invertedIndex[word]) {
                         if (resultSet === null) {
                             resultSet = new Set(invertedIndex[word]);
                         } else {
-                            resultSet = new Set([...resultSet].filter(x => invertedIndex[word].has(x)));
+                            // Optimized Set intersection without spread/filter
+                            const newSet = new Set();
+                            const wordSet = invertedIndex[word];
+                            for (const idx of resultSet) {
+                                if (wordSet.has(idx)) newSet.add(idx);
+                            }
+                            resultSet = newSet;
                         }
                     } else {
-                        resultSet = new Set();
+                        // Word not found, no results possible
+                        return { results: [], searchTime: performance.now() - startTime };
                     }
-                });
+                }
 
                 const results = resultSet ? Array.from(resultSet).map(index => messages[index]) : [];
                 const endTime = performance.now();
@@ -314,9 +331,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return messages;
     }
 
-    // Display Results
-    function displayResults(results, query) {
-        log(`Displaying ${results.length} search results for query: "${query}"`);
+    // Truncate long names for display
+    function truncateName(name, maxLength = MAX_NAME_LENGTH) {
+        if (!name || typeof name !== 'string') return '';
+        const trimmed = name.trim();
+        if (trimmed.length <= maxLength) return trimmed;
+        return trimmed.substring(0, maxLength - 3) + '...';
+    }
+
+    // Display Results with pagination and DocumentFragment optimization
+    function displayResults(results, query, page = 0) {
+        log(`Displaying ${results.length} search results for query: "${query}", page: ${page}`);
+
+        // Store for pagination
+        currentResults = results;
+        currentQuery = query;
+        currentPage = page;
+
         resultsDiv.innerHTML = '';
 
         if (results.length === 0) {
@@ -324,15 +355,24 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        results.forEach(message => {
+        const totalPages = Math.ceil(results.length / RESULTS_PER_PAGE);
+        const startIndex = page * RESULTS_PER_PAGE;
+        const endIndex = Math.min(startIndex + RESULTS_PER_PAGE, results.length);
+        const pageResults = results.slice(startIndex, endIndex);
+
+        // Use DocumentFragment for batch DOM insertion (10-50x faster for large result sets)
+        const fragment = document.createDocumentFragment();
+
+        pageResults.forEach(message => {
             const messageCard = document.createElement('div');
             messageCard.className = 'box message';
+            const displayName = truncateName(message.sender);
             messageCard.innerHTML = `
                 <article class="media">
                     <div class="media-content">
                         <div class="content">
                             <p>
-                                <strong>${highlightText(message.sender, query)}</strong>
+                                <strong class="sender-name" title="${escapeHTML(message.sender)}">${highlightText(displayName, query)}</strong>
                                 <br>
                                 ${highlightText(message.content, query)}
                                 <br>
@@ -343,43 +383,90 @@ document.addEventListener('DOMContentLoaded', () => {
                 </article>
             `;
             messageCard.addEventListener('click', () => showContext(message.id, query));
-            resultsDiv.appendChild(messageCard);
+            fragment.appendChild(messageCard);
         });
+
+        resultsDiv.appendChild(fragment);
+
+        // Add pagination controls if needed
+        if (totalPages > 1) {
+            const paginationDiv = document.createElement('div');
+            paginationDiv.className = 'pagination-controls has-text-centered mt-4';
+            paginationDiv.innerHTML = `
+                <nav class="pagination is-centered" role="navigation" aria-label="pagination">
+                    <button class="pagination-previous button" ${page === 0 ? 'disabled' : ''} id="prevPage">Previous</button>
+                    <span class="pagination-info mx-3">Page ${page + 1} of ${totalPages} (${results.length} results)</span>
+                    <button class="pagination-next button" ${page >= totalPages - 1 ? 'disabled' : ''} id="nextPage">Next</button>
+                </nav>
+            `;
+            resultsDiv.appendChild(paginationDiv);
+
+            // Attach pagination event listeners
+            const prevBtn = document.getElementById('prevPage');
+            const nextBtn = document.getElementById('nextPage');
+            if (prevBtn && page > 0) {
+                prevBtn.addEventListener('click', () => displayResults(currentResults, currentQuery, currentPage - 1));
+            }
+            if (nextBtn && page < totalPages - 1) {
+                nextBtn.addEventListener('click', () => displayResults(currentResults, currentQuery, currentPage + 1));
+            }
+        }
     }
 
-    // Show Context Messages
+    // Show Context Messages with DocumentFragment optimization
     function showContext(messageId, query) {
         log(`Showing context for message ID: ${messageId}, query: "${query}"`);
+
+        // Defensive check for messageId
+        if (messageId === undefined || messageId === null) {
+            log('Invalid message ID provided', 'warn');
+            return;
+        }
+
         const index = fullMessageList.findIndex(m => m.id === messageId);
-        if (index === -1) return;
+        if (index === -1) {
+            log(`Message with ID ${messageId} not found in list`, 'warn');
+            return;
+        }
 
         const start = Math.max(0, index - 10);
         const end = Math.min(fullMessageList.length, index + 11);
         const contextMessagesToShow = fullMessageList.slice(start, end);
 
         contextMessages.innerHTML = '';
+
+        // Use DocumentFragment for batch DOM insertion
+        const fragment = document.createDocumentFragment();
+
         contextMessagesToShow.forEach((message, i) => {
             const messageDiv = document.createElement('div');
             messageDiv.className = 'box mb-2';
             if (i === index - start) messageDiv.classList.add('highlight');
+
+            // Defensive null checks for message properties
+            const safeSender = message?.sender ?? '';
+            const safeContent = message?.content ?? '';
+            const safeDate = message?.date ?? '';
+
             messageDiv.innerHTML = `
                 <article class="media">
                     <div class="media-content">
                         <div class="content">
                             <p>
-                                <strong>${escapeHTML(message.sender)}</strong>
+                                <strong class="sender-name" title="${escapeHTML(safeSender)}">${escapeHTML(truncateName(safeSender))}</strong>
                                 <br>
-                                ${escapeHTML(message.content)}
+                                ${escapeHTML(safeContent)}
                                 <br>
-                                <small>${escapeHTML(message.date)}</small>
+                                <small>${escapeHTML(safeDate)}</small>
                             </p>
                         </div>
                     </div>
                 </article>
             `;
-            contextMessages.appendChild(messageDiv);
+            fragment.appendChild(messageDiv);
         });
 
+        contextMessages.appendChild(fragment);
         contextModal.classList.add('is-active');
 
         // Scroll to the highlighted message
@@ -389,8 +476,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Escape HTML to prevent XSS
+    // Escape HTML to prevent XSS (with defensive null check)
     function escapeHTML(str) {
+        if (str === null || str === undefined) return '';
+        if (typeof str !== 'string') str = String(str);
         return str.replace(/[&<>'"]/g, (tag) => {
             const chars = {
                 '&': '&amp;',
@@ -403,14 +492,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Highlight Text
+    // Highlight Text (with defensive null check)
     function highlightText(text, query) {
-        log(`Highlighting text for query: "${query}"`);
-        if (!query) return escapeHTML(text);
+        // Defensive null check - escapeHTML handles null/undefined
+        const safeText = escapeHTML(text);
+        if (!query || typeof query !== 'string') return safeText;
         const words = query.trim().split(/\s+/).filter(word => word);
-        if (words.length === 0) return escapeHTML(text);
+        if (words.length === 0) return safeText;
         const regex = new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
-        return escapeHTML(text).replace(regex, '<span class="highlight">$1</span>');
+        return safeText.replace(regex, '<span class="highlight">$1</span>');
     }
 
     // Update Search Statistics
