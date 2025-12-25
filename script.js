@@ -1,97 +1,97 @@
-document.addEventListener('DOMContentLoaded', () => {
+/**
+ * Instasearch - Privacy-First Instagram Message Search
+ * All processing happens locally in the browser
+ */
+
+(function() {
+    'use strict';
+
+    // ============================================
     // Configuration
-    const DEV_MODE = false; // Set to true for development logging
-    const RESULTS_PER_PAGE = 50; // Pagination limit
-    const MAX_NAME_LENGTH = 100; // Maximum display length for sender names
+    // ============================================
+    const RESULTS_PER_PAGE = 50;
+    const MAX_NAME_LENGTH = 100;
 
-    // Variables and DOM Elements
-    const statusDiv = document.getElementById('status');
-    const fileInput = document.getElementById('fileInput');
-    const searchInput = document.getElementById('searchInput');
-    const resultsDiv = document.getElementById('results');
-    const loadingIndicator = document.getElementById('loadingIndicator');
-    const darkModeToggle = document.getElementById('darkModeToggle');
-    const clearSearchButton = document.getElementById('clearSearch');
-    const searchStats = document.getElementById('searchStats');
-    const contextModal = document.getElementById('contextModal');
-    const contextMessages = document.getElementById('contextMessages');
-    const closeModalButtons = [document.getElementById('closeModal'), document.getElementById('closeModalBackground')];
-    const fileDropZone = document.getElementById('fileDropZone');
-    let worker;
-    let fullMessageList = [];
-    let messageIdCounter = 0;
-    let currentPage = 0;
-    let currentResults = [];
-    let currentQuery = '';
+    // ============================================
+    // State
+    // ============================================
+    const state = {
+        messages: [],
+        worker: null,
+        hasFiles: false,
+        isSearching: false,
+        currentQuery: '',
+        currentResults: [],
+        currentPage: 0
+    };
 
-    // Initialize logging (only in dev mode)
-    const log = DEV_MODE
-        ? (message, level = 'info') => {
-            const timestamp = new Date().toISOString();
-            console[level](`[${timestamp}] ${message}`);
-        }
-        : () => {}; // No-op in production
+    // ============================================
+    // DOM Elements
+    // ============================================
+    const elements = {
+        // Theme
+        themeToggle: document.getElementById('themeToggle'),
 
-    log('Application initialized');
+        // Hero & Upload
+        heroSection: document.getElementById('heroSection'),
+        uploadZone: document.getElementById('uploadZone'),
+        fileInput: document.getElementById('fileInput'),
 
-    // Initialize Dark Mode
-    initDarkMode();
+        // Search
+        searchSection: document.getElementById('searchSection'),
+        searchInput: document.getElementById('searchInput'),
+        clearSearch: document.getElementById('clearSearch'),
+        messageCount: document.getElementById('messageCount'),
+        searchStats: document.getElementById('searchStats'),
 
-    // Create Web Worker
-    worker = createWorker();
+        // Results
+        resultsSection: document.getElementById('resultsSection'),
+        loadingState: document.getElementById('loadingState'),
+        emptyState: document.getElementById('emptyState'),
+        noResultsState: document.getElementById('noResultsState'),
+        resultsList: document.getElementById('resultsList'),
 
-    // Event Listeners
-    fileInput.addEventListener('change', handleFileInput);
-    searchInput.addEventListener('input', debounce(handleSearchInput, 300));
-    darkModeToggle.addEventListener('click', toggleDarkMode);
-    clearSearchButton.addEventListener('click', clearSearch);
-    closeModalButtons.forEach(button => button.addEventListener('click', closeModal));
-    window.addEventListener('click', handleWindowClick);
-    fileDropZone.addEventListener('dragover', handleDragOver);
-    fileDropZone.addEventListener('dragleave', handleDragLeave);
-    fileDropZone.addEventListener('drop', handleFileDrop);
+        // Modal
+        contextModal: document.getElementById('contextModal'),
+        contextMessages: document.getElementById('contextMessages'),
+        closeModal: document.getElementById('closeModal'),
 
-    // Initialize Application
-    init();
+        // Other
+        toastContainer: document.getElementById('toastContainer'),
+        addMoreFiles: document.getElementById('addMoreFiles')
+    };
 
-    // Functions
-
-    // Initialize Dark Mode
-    function initDarkMode() {
-        log('Initializing dark mode');
-        const isDarkMode = localStorage.getItem('darkMode') === 'enabled';
-        document.body.classList.toggle('dark-mode', isDarkMode);
-        updateDarkModeButton(isDarkMode);
-        log(`Dark mode initialized. Current state: ${isDarkMode ? 'enabled' : 'disabled'}`);
+    // ============================================
+    // Initialize
+    // ============================================
+    function init() {
+        initTheme();
+        initWorker();
+        bindEvents();
+        checkBrowserSupport();
     }
 
-    function updateDarkModeButton(isDark) {
-        log(`Updating dark mode button. isDark: ${isDark}`);
-        darkModeToggle.classList.toggle('is-dark', isDark);
-        darkModeToggle.classList.toggle('is-light', !isDark);
-        darkModeToggle.innerHTML = isDark
-            ? '<span class="icon"><i class="fas fa-sun"></i></span><span>Light Mode</span>'
-            : '<span class="icon"><i class="fas fa-moon"></i></span><span>Dark Mode</span>';
+    // ============================================
+    // Theme Management
+    // ============================================
+    function initTheme() {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
     }
 
-    function toggleDarkMode() {
-        const body = document.body;
-        const darkModeToggle = document.getElementById('darkModeToggle');
-
-        body.classList.toggle('dark-mode');
-
-        if (body.classList.contains('dark-mode')) {
-            darkModeToggle.innerHTML = '<span class="icon"><i class="fas fa-sun"></i></span><span>Light Mode</span>';
-            localStorage.setItem('darkMode', 'enabled');
-        } else {
-            darkModeToggle.innerHTML = '<span class="icon"><i class="fas fa-moon"></i></span><span>Dark Mode</span>';
-            localStorage.setItem('darkMode', 'disabled');
-        }
+    function toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
     }
 
-    // Create Web Worker
-    function createWorker() {
-        log('Creating Web Worker');
+    // ============================================
+    // Web Worker (with optimized Set intersection)
+    // ============================================
+    function initWorker() {
         const workerCode = `
             let messages = [];
             let invertedIndex = {};
@@ -151,184 +151,215 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
         `;
+
         const blob = new Blob([workerCode], { type: 'application/javascript' });
         const blobURL = URL.createObjectURL(blob);
-        const worker = new Worker(blobURL);
-        // Revoke the blob URL to prevent memory leak
+        state.worker = new Worker(blobURL);
         URL.revokeObjectURL(blobURL);
-        log('Web Worker created successfully');
-        return worker;
+
+        state.worker.onmessage = handleWorkerMessage;
+        state.worker.onerror = handleWorkerError;
     }
 
-    // Handle File Input Change
-    function handleFileInput(event) {
-        log('File input change detected');
-        const files = Array.from(event.target.files).filter(file => file.name.endsWith('.html'));
-        log(`${files.length} HTML files selected`);
-        if (files.length > 0) {
-            processFiles(files);
-        } else {
-            log('No valid HTML files selected', 'warn');
-            addNotification('Please upload valid HTML files.', 'is-warning');
+    function handleWorkerMessage(e) {
+        const { type, count, results, query, searchTime } = e.data;
+
+        if (type === 'processed') {
+            updateMessageCount(count);
+            showToast(`Loaded ${count.toLocaleString()} messages`, 'success');
+        } else if (type === 'searchResults') {
+            state.isSearching = false;
+            state.currentResults = results;
+            displayResults(results, query, searchTime, 0);
         }
     }
 
-    // Handle Search Input
-    function handleSearchInput(event) {
-        const query = event.target.value;
-        log(`Search input detected: "${query}"`);
-        if (query.trim() === '') {
-            log('Empty search query, clearing results');
-            clearResults();
-            return;
-        }
-        log('Initiating search');
-        loadingIndicator.style.display = 'block';
-        worker.postMessage({ type: 'search', query });
+    function handleWorkerError(e) {
+        console.error('Worker error:', e);
+        showToast('An error occurred while processing', 'error');
+        state.isSearching = false;
     }
 
-    // Handle Drag Over
-    function handleDragOver(event) {
-        event.preventDefault();
-        fileDropZone.classList.add('drag-over');
+    // ============================================
+    // Event Bindings
+    // ============================================
+    function bindEvents() {
+        // Theme
+        elements.themeToggle.addEventListener('click', toggleTheme);
+
+        // File upload
+        elements.fileInput.addEventListener('change', handleFileSelect);
+        elements.uploadZone.addEventListener('dragover', handleDragOver);
+        elements.uploadZone.addEventListener('dragleave', handleDragLeave);
+        elements.uploadZone.addEventListener('drop', handleDrop);
+        elements.addMoreFiles.addEventListener('click', () => elements.fileInput.click());
+
+        // Search
+        elements.searchInput.addEventListener('input', debounce(handleSearch, 300));
+        elements.clearSearch.addEventListener('click', clearSearch);
+
+        // Modal
+        elements.closeModal.addEventListener('click', closeModal);
+        elements.contextModal.addEventListener('click', (e) => {
+            if (e.target === elements.contextModal) closeModal();
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', handleKeydown);
     }
 
-    // Handle Drag Leave
-    function handleDragLeave(event) {
-        event.preventDefault();
-        fileDropZone.classList.remove('drag-over');
-    }
-
-    // Handle File Drop
-    function handleFileDrop(event) {
-        event.preventDefault();
-        fileDropZone.classList.remove('drag-over');
-        const files = Array.from(event.dataTransfer.files).filter(file => file.name.endsWith('.html'));
-        log(`${files.length} HTML files dropped`);
-        if (files.length > 0) {
-            processFiles(files);
-        } else {
-            log('No valid HTML files dropped', 'warn');
-            addNotification('Please upload valid HTML files.', 'is-warning');
-        }
-    }
-
-    // Handle Window Click (for closing modal)
-    function handleWindowClick(event) {
-        if (event.target.classList.contains('modal-background')) {
+    function handleKeydown(e) {
+        // Escape closes modal
+        if (e.key === 'Escape' && elements.contextModal.classList.contains('active')) {
             closeModal();
         }
+
+        // Cmd/Ctrl + K focuses search
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k' && state.hasFiles) {
+            e.preventDefault();
+            elements.searchInput.focus();
+        }
     }
 
-    // Close Modal
-    function closeModal() {
-        contextModal.classList.remove('is-active');
+    // ============================================
+    // File Handling
+    // ============================================
+    function handleFileSelect(e) {
+        const files = Array.from(e.target.files).filter(f => f.name.endsWith('.html'));
+        if (files.length > 0) {
+            processFiles(files);
+        } else {
+            showToast('Please select HTML files from Instagram data export', 'warning');
+        }
     }
 
-    // Clear Search
-    function clearSearch() {
-        searchInput.value = '';
-        clearResults();
+    function handleDragOver(e) {
+        e.preventDefault();
+        elements.uploadZone.classList.add('drag-over');
     }
 
-    // Clear Results
-    function clearResults() {
-        resultsDiv.innerHTML = '';
-        searchStats.textContent = '';
+    function handleDragLeave(e) {
+        e.preventDefault();
+        elements.uploadZone.classList.remove('drag-over');
     }
 
-    // Debounce Function
-    function debounce(func, wait) {
-        let timeout;
-        return (...args) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), wait);
-        };
+    function handleDrop(e) {
+        e.preventDefault();
+        elements.uploadZone.classList.remove('drag-over');
+
+        const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.html'));
+        if (files.length > 0) {
+            processFiles(files);
+        } else {
+            showToast('Please drop HTML files from Instagram data export', 'warning');
+        }
     }
 
-    // Add Notification
-    function addNotification(message, type) {
-        log(`Adding notification: ${message} (${type})`);
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.innerHTML = `
-            <button class="delete"></button>
-            ${message}
-        `;
-        statusDiv.appendChild(notification);
-        notification.style.display = 'block';
-
-        // Auto-dismiss after 5 seconds
-        setTimeout(() => {
-            notification.classList.add('is-hidden');
-            notification.addEventListener('transitionend', () => notification.remove());
-        }, 5000);
-
-        // Dismiss on delete button click
-        notification.querySelector('.delete').addEventListener('click', () => {
-            notification.classList.add('is-hidden');
-            notification.addEventListener('transitionend', () => notification.remove());
-        });
-    }
-
-    // Process Files
     async function processFiles(files) {
-        log(`Processing ${files.length} files`);
-        let processedFiles = 0;
-        let totalMessages = 0;
+        let messageIdCounter = state.messages.length;
+        let totalNewMessages = 0;
 
-        for (let file of files) {
-            let messages = [];
+        for (const file of files) {
             try {
-                log(`Processing file: ${file.name}`);
                 const text = await file.text();
-                messages = processHTML(text);
-                log(`Extracted ${messages.length} messages from ${file.name}`);
+                const messages = parseHTML(text, messageIdCounter);
 
-                // Send to worker first, then update local list on success
-                worker.postMessage({ type: 'addMessages', messages });
-                fullMessageList = fullMessageList.concat(messages);
-                totalMessages += messages.length;
-                processedFiles++;
-            } catch (error) {
-                log(`Error processing ${file.name}: ${error.message}`, 'error');
-                console.error(`Error processing ${file.name}:`, error);
-                addNotification(`Error processing ${file.name}: ${error.message}`, 'is-danger');
-
-                // Rollback message IDs if processing failed
                 if (messages.length > 0) {
-                    messageIdCounter -= messages.length;
+                    state.worker.postMessage({ type: 'addMessages', messages });
+                    state.messages = state.messages.concat(messages);
+                    messageIdCounter += messages.length;
+                    totalNewMessages += messages.length;
                 }
+            } catch (error) {
+                console.error(`Error processing ${file.name}:`, error);
+                showToast(`Error processing ${file.name}`, 'error');
             }
         }
 
-        log(`Finished processing files. Processed: ${processedFiles}, Total messages: ${totalMessages}`);
-        if (processedFiles > 0) {
-            addNotification(`Processed ${processedFiles} file(s): ${totalMessages} message(s)`, 'is-success');
+        if (totalNewMessages > 0) {
+            transitionToSearchMode();
+        } else {
+            showToast('No messages found in the uploaded files', 'warning');
         }
     }
 
-    // Process HTML Content
-    function processHTML(html) {
-        log('Processing HTML content');
+    function parseHTML(html, startId) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         const messageDivs = doc.querySelectorAll('.pam._3-95._2ph-._a6-g');
+        let id = startId;
 
-        const messages = Array.from(messageDivs).map((div) => {
-            const senderElement = div.querySelector('._a6-h');
-            const contentElement = div.querySelector('._a6-p');
-            const dateElement = div.querySelector('._a6-o');
+        return Array.from(messageDivs).map(div => {
+            const senderEl = div.querySelector('._a6-h');
+            const contentEl = div.querySelector('._a6-p');
+            const dateEl = div.querySelector('._a6-o');
+
             return {
-                id: messageIdCounter++,
-                sender: senderElement ? senderElement.textContent.trim() : '',
-                content: contentElement ? contentElement.textContent.trim() : '',
-                date: dateElement ? dateElement.textContent.trim() : ''
+                id: id++,
+                sender: senderEl ? senderEl.textContent.trim() : '',
+                content: contentEl ? contentEl.textContent.trim() : '',
+                date: dateEl ? dateEl.textContent.trim() : ''
             };
-        }).filter(message => message.sender && message.content && message.date);
+        }).filter(m => m.sender && m.content && m.date);
+    }
 
-        log(`Extracted ${messages.length} messages from HTML`);
-        return messages;
+    // ============================================
+    // UI State Transitions
+    // ============================================
+    function transitionToSearchMode() {
+        state.hasFiles = true;
+
+        // Collapse hero
+        elements.heroSection.classList.add('collapsed');
+
+        // Show search section
+        elements.searchSection.classList.add('active');
+
+        // Show results section with empty state
+        elements.resultsSection.classList.add('active');
+        elements.emptyState.classList.add('active');
+
+        // Show FAB
+        elements.addMoreFiles.classList.add('visible');
+
+        // Focus search input
+        setTimeout(() => elements.searchInput.focus(), 300);
+    }
+
+    function updateMessageCount(count) {
+        elements.messageCount.textContent = `${count.toLocaleString()} messages loaded`;
+    }
+
+    // ============================================
+    // Search
+    // ============================================
+    function handleSearch(e) {
+        const query = e.target.value.trim();
+        state.currentQuery = query;
+
+        // Update clear button visibility
+        elements.clearSearch.classList.toggle('visible', query.length > 0);
+
+        if (!query) {
+            showEmptyState();
+            elements.searchStats.textContent = '';
+            return;
+        }
+
+        showLoadingState();
+        state.isSearching = true;
+        state.worker.postMessage({ type: 'search', query });
+    }
+
+    function clearSearch() {
+        elements.searchInput.value = '';
+        elements.clearSearch.classList.remove('visible');
+        elements.searchStats.textContent = '';
+        state.currentQuery = '';
+        state.currentResults = [];
+        state.currentPage = 0;
+        showEmptyState();
+        elements.searchInput.focus();
     }
 
     // Truncate long names for display
@@ -339,19 +370,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return trimmed.substring(0, maxLength - 3) + '...';
     }
 
-    // Display Results with pagination and DocumentFragment optimization
-    function displayResults(results, query, page = 0) {
-        log(`Displaying ${results.length} search results for query: "${query}", page: ${page}`);
-
-        // Store for pagination
-        currentResults = results;
-        currentQuery = query;
-        currentPage = page;
-
-        resultsDiv.innerHTML = '';
+    function displayResults(results, query, searchTime, page = 0) {
+        hideAllStates();
+        state.currentPage = page;
 
         if (results.length === 0) {
-            resultsDiv.innerHTML = '<div class="notification is-warning">No messages found.</div>';
+            showNoResultsState();
+            elements.searchStats.textContent = '';
             return;
         }
 
@@ -360,183 +385,235 @@ document.addEventListener('DOMContentLoaded', () => {
         const endIndex = Math.min(startIndex + RESULTS_PER_PAGE, results.length);
         const pageResults = results.slice(startIndex, endIndex);
 
-        // Use DocumentFragment for batch DOM insertion (10-50x faster for large result sets)
-        const fragment = document.createDocumentFragment();
-
-        pageResults.forEach(message => {
-            const messageCard = document.createElement('div');
-            messageCard.className = 'box message';
-            const displayName = truncateName(message.sender);
-            messageCard.innerHTML = `
-                <article class="media">
-                    <div class="media-content">
-                        <div class="content">
-                            <p>
-                                <strong class="sender-name" title="${escapeHTML(message.sender)}">${highlightText(displayName, query)}</strong>
-                                <br>
-                                ${highlightText(message.content, query)}
-                                <br>
-                                <small>${highlightText(message.date, query)}</small>
-                            </p>
-                        </div>
-                    </div>
-                </article>
-            `;
-            messageCard.addEventListener('click', () => showContext(message.id, query));
-            fragment.appendChild(messageCard);
-        });
-
-        resultsDiv.appendChild(fragment);
-
-        // Add pagination controls if needed
-        if (totalPages > 1) {
-            const paginationDiv = document.createElement('div');
-            paginationDiv.className = 'pagination-controls has-text-centered mt-4';
-            paginationDiv.innerHTML = `
-                <nav class="pagination is-centered" role="navigation" aria-label="pagination">
-                    <button class="pagination-previous button" ${page === 0 ? 'disabled' : ''} id="prevPage">Previous</button>
-                    <span class="pagination-info mx-3">Page ${page + 1} of ${totalPages} (${results.length} results)</span>
-                    <button class="pagination-next button" ${page >= totalPages - 1 ? 'disabled' : ''} id="nextPage">Next</button>
-                </nav>
-            `;
-            resultsDiv.appendChild(paginationDiv);
-
-            // Attach pagination event listeners
-            const prevBtn = document.getElementById('prevPage');
-            const nextBtn = document.getElementById('nextPage');
-            if (prevBtn && page > 0) {
-                prevBtn.addEventListener('click', () => displayResults(currentResults, currentQuery, currentPage - 1));
-            }
-            if (nextBtn && page < totalPages - 1) {
-                nextBtn.addEventListener('click', () => displayResults(currentResults, currentQuery, currentPage + 1));
-            }
-        }
-    }
-
-    // Show Context Messages with DocumentFragment optimization
-    function showContext(messageId, query) {
-        log(`Showing context for message ID: ${messageId}, query: "${query}"`);
-
-        // Defensive check for messageId
-        if (messageId === undefined || messageId === null) {
-            log('Invalid message ID provided', 'warn');
-            return;
-        }
-
-        const index = fullMessageList.findIndex(m => m.id === messageId);
-        if (index === -1) {
-            log(`Message with ID ${messageId} not found in list`, 'warn');
-            return;
-        }
-
-        const start = Math.max(0, index - 10);
-        const end = Math.min(fullMessageList.length, index + 11);
-        const contextMessagesToShow = fullMessageList.slice(start, end);
-
-        contextMessages.innerHTML = '';
+        elements.searchStats.textContent = `${results.length.toLocaleString()} results in ${searchTime.toFixed(1)}ms`;
+        elements.resultsList.innerHTML = '';
 
         // Use DocumentFragment for batch DOM insertion
         const fragment = document.createDocumentFragment();
 
-        contextMessagesToShow.forEach((message, i) => {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'box mb-2';
-            if (i === index - start) messageDiv.classList.add('highlight');
-
-            // Defensive null checks for message properties
-            const safeSender = message?.sender ?? '';
-            const safeContent = message?.content ?? '';
-            const safeDate = message?.date ?? '';
-
-            messageDiv.innerHTML = `
-                <article class="media">
-                    <div class="media-content">
-                        <div class="content">
-                            <p>
-                                <strong class="sender-name" title="${escapeHTML(safeSender)}">${escapeHTML(truncateName(safeSender))}</strong>
-                                <br>
-                                ${escapeHTML(safeContent)}
-                                <br>
-                                <small>${escapeHTML(safeDate)}</small>
-                            </p>
-                        </div>
-                    </div>
-                </article>
-            `;
-            fragment.appendChild(messageDiv);
+        pageResults.forEach(message => {
+            const card = createMessageCard(message, query);
+            fragment.appendChild(card);
         });
 
-        contextMessages.appendChild(fragment);
-        contextModal.classList.add('is-active');
+        elements.resultsList.appendChild(fragment);
 
-        // Scroll to the highlighted message
-        const highlightedMessage = contextMessages.querySelector('.highlight');
-        if (highlightedMessage) {
-            highlightedMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Add pagination if needed
+        if (totalPages > 1) {
+            const paginationDiv = createPagination(page, totalPages, results.length, query, searchTime);
+            elements.resultsList.appendChild(paginationDiv);
         }
     }
 
-    // Escape HTML to prevent XSS (with defensive null check)
+    function createMessageCard(message, query) {
+        const card = document.createElement('div');
+        card.className = 'message-card';
+        const displayName = truncateName(message.sender);
+        card.innerHTML = `
+            <div class="message-sender" title="${escapeHTML(message.sender)}">${highlightText(escapeHTML(displayName), query)}</div>
+            <div class="message-content">${highlightText(escapeHTML(message.content), query)}</div>
+            <div class="message-date">${escapeHTML(message.date)}</div>
+        `;
+        card.addEventListener('click', () => showContext(message.id));
+        return card;
+    }
+
+    function createPagination(page, totalPages, totalResults, query, searchTime) {
+        const paginationDiv = document.createElement('div');
+        paginationDiv.className = 'pagination-controls';
+        paginationDiv.innerHTML = `
+            <button class="pagination-btn" ${page === 0 ? 'disabled' : ''} id="prevPage">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                Previous
+            </button>
+            <span class="pagination-info">Page ${page + 1} of ${totalPages}</span>
+            <button class="pagination-btn" ${page >= totalPages - 1 ? 'disabled' : ''} id="nextPage">
+                Next
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+        `;
+
+        const prevBtn = paginationDiv.querySelector('#prevPage');
+        const nextBtn = paginationDiv.querySelector('#nextPage');
+
+        if (prevBtn && page > 0) {
+            prevBtn.addEventListener('click', () => displayResults(state.currentResults, query, searchTime, page - 1));
+        }
+        if (nextBtn && page < totalPages - 1) {
+            nextBtn.addEventListener('click', () => displayResults(state.currentResults, query, searchTime, page + 1));
+        }
+
+        return paginationDiv;
+    }
+
+    // ============================================
+    // Results States
+    // ============================================
+    function hideAllStates() {
+        elements.loadingState.classList.remove('active');
+        elements.emptyState.classList.remove('active');
+        elements.noResultsState.classList.remove('active');
+        elements.resultsList.innerHTML = '';
+    }
+
+    function showLoadingState() {
+        hideAllStates();
+        elements.loadingState.classList.add('active');
+    }
+
+    function showEmptyState() {
+        hideAllStates();
+        elements.emptyState.classList.add('active');
+    }
+
+    function showNoResultsState() {
+        hideAllStates();
+        elements.noResultsState.classList.add('active');
+    }
+
+    // ============================================
+    // Context Modal
+    // ============================================
+    function showContext(messageId) {
+        if (messageId === undefined || messageId === null) return;
+
+        const index = state.messages.findIndex(m => m.id === messageId);
+        if (index === -1) return;
+
+        const start = Math.max(0, index - 10);
+        const end = Math.min(state.messages.length, index + 11);
+        const contextMsgs = state.messages.slice(start, end);
+
+        elements.contextMessages.innerHTML = '';
+
+        // Use DocumentFragment for batch DOM insertion
+        const fragment = document.createDocumentFragment();
+
+        contextMsgs.forEach((msg, i) => {
+            const div = document.createElement('div');
+            div.className = 'context-message' + (i === index - start ? ' current' : '');
+
+            // Defensive null checks
+            const safeSender = msg?.sender ?? '';
+            const safeContent = msg?.content ?? '';
+            const safeDate = msg?.date ?? '';
+
+            div.innerHTML = `
+                <div class="message-sender" title="${escapeHTML(safeSender)}">${escapeHTML(truncateName(safeSender))}</div>
+                <div class="message-content">${escapeHTML(safeContent)}</div>
+                <div class="message-date">${escapeHTML(safeDate)}</div>
+            `;
+            fragment.appendChild(div);
+        });
+
+        elements.contextMessages.appendChild(fragment);
+        elements.contextModal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        // Scroll to current message
+        setTimeout(() => {
+            const current = elements.contextMessages.querySelector('.current');
+            if (current) {
+                current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 100);
+    }
+
+    function closeModal() {
+        elements.contextModal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    // ============================================
+    // Toast Notifications
+    // ============================================
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        const icons = {
+            success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+            error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+            warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+            info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+        };
+
+        toast.innerHTML = `
+            <span class="toast-icon">${icons[type] || icons.info}</span>
+            <span class="toast-message">${escapeHTML(message)}</span>
+            <button class="toast-close" aria-label="Dismiss">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        `;
+
+        const closeBtn = toast.querySelector('.toast-close');
+        closeBtn.addEventListener('click', () => removeToast(toast));
+
+        elements.toastContainer.appendChild(toast);
+
+        // Auto-dismiss after 4 seconds
+        setTimeout(() => removeToast(toast), 4000);
+    }
+
+    function removeToast(toast) {
+        toast.style.animation = 'slideUp 0.2s ease reverse';
+        setTimeout(() => toast.remove(), 200);
+    }
+
+    // ============================================
+    // Utilities
+    // ============================================
     function escapeHTML(str) {
         if (str === null || str === undefined) return '';
         if (typeof str !== 'string') str = String(str);
-        return str.replace(/[&<>'"]/g, (tag) => {
-            const chars = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                "'": '&#39;',
-                '"': '&quot;'
-            };
-            return chars[tag] || tag;
-        });
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        };
+        return str.replace(/[&<>"']/g, c => map[c]);
     }
 
-    // Highlight Text (with defensive null check)
     function highlightText(text, query) {
-        // Defensive null check - escapeHTML handles null/undefined
-        const safeText = escapeHTML(text);
-        if (!query || typeof query !== 'string') return safeText;
-        const words = query.trim().split(/\s+/).filter(word => word);
-        if (words.length === 0) return safeText;
-        const regex = new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
-        return safeText.replace(regex, '<span class="highlight">$1</span>');
+        if (!query || typeof query !== 'string') return text;
+
+        const words = query.split(/\s+/).filter(w => w);
+        if (words.length === 0) return text;
+
+        const pattern = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+        const regex = new RegExp(`(${pattern})`, 'gi');
+
+        return text.replace(regex, '<span class="highlight">$1</span>');
     }
 
-    // Update Search Statistics
-    function updateSearchStats(resultCount, searchTime) {
-        log(`Updating search stats: ${resultCount} results in ${searchTime.toFixed(2)} ms`);
-        searchStats.textContent = `Found ${resultCount} result(s) in ${searchTime.toFixed(2)} ms`;
+    function debounce(fn, delay) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => fn.apply(this, args), delay);
+        };
     }
 
-    // Initialize Application
-    function init() {
-        log('Initializing application');
-        if (!(window.File && window.FileReader && window.FileList && window.Blob && window.Worker)) {
-            log('Browser does not support required features', 'error');
-            addNotification('Your browser does not support one or more features required for this application. Please use a modern browser.', 'is-danger');
+    function checkBrowserSupport() {
+        const required = ['File', 'FileReader', 'FileList', 'Blob', 'Worker'];
+        const unsupported = required.filter(api => !(api in window));
+
+        if (unsupported.length > 0) {
+            showToast('Your browser may not support all features. Please use a modern browser.', 'warning');
         }
-
-        // Worker Message Handling
-        worker.onmessage = function(e) {
-            log(`Received message from worker: ${e.data.type}`);
-            if (e.data.type === 'processed') {
-                log(`Worker processed messages. Total count: ${e.data.count}`);
-                addNotification(`Processed messages. Total count: ${e.data.count}`, 'is-success');
-            } else if (e.data.type === 'searchResults') {
-                log(`Received search results: ${e.data.results.length} results for query "${e.data.query}" in ${e.data.searchTime.toFixed(2)} ms`);
-                displayResults(e.data.results, e.data.query);
-                loadingIndicator.style.display = 'none';
-                updateSearchStats(e.data.results.length, e.data.searchTime);
-            }
-        };
-
-        worker.onerror = function(e) {
-            log(`Worker error: ${e.message}`, 'error');
-            console.error('Worker error:', e);
-            addNotification('An error occurred in the worker thread.', 'is-danger');
-        };
-
-        log('Application initialization complete');
     }
-});
+
+    // ============================================
+    // Start
+    // ============================================
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
