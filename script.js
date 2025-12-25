@@ -155,9 +155,16 @@
         const blob = new Blob([workerCode], { type: 'application/javascript' });
         const blobURL = URL.createObjectURL(blob);
         state.worker = new Worker(blobURL);
-        URL.revokeObjectURL(blobURL);
 
-        state.worker.onmessage = handleWorkerMessage;
+        // Revoke blob URL after worker successfully loads (first message received)
+        let urlRevoked = false;
+        state.worker.onmessage = (e) => {
+            if (!urlRevoked) {
+                URL.revokeObjectURL(blobURL);
+                urlRevoked = true;
+            }
+            handleWorkerMessage(e);
+        };
         state.worker.onerror = handleWorkerError;
     }
 
