@@ -205,3 +205,50 @@ body.dark-mode .button.is-info:hover {
     background-color: var(--highlight-color);
     color: var(--text-color);
 }
+
+/* Sender name styling with overflow handling */
+.sender-name {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+/* Pagination controls */
+.pagination-controls {
+    margin-top: 1.5rem;
+    padding: 1rem;
+}
+
+.pagination-controls .pagination-info {
+    color: var(--text-color);
+    font-weight: 500;
+}
+
+.pagination-controls .button {
+    background-color: var(--button-bg);
+    color: var(--button-text);
+    border: none;
+}
+
+.pagination-controls .button:hover:not([disabled]) {
+    opacity: 0.9;
+}
+
+.pagination-controls .button[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Message card improvements */
+.box.message {
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.box.message:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
