@@ -2,67 +2,165 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InstaSearch v2.0</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="description" content="Instasearch - Privacy-first Instagram message search. All processing happens locally in your browser.">
+    <meta name="theme-color" content="#8b5cf6">
+    <title>Instasearch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <section class="section">
-        <div class="container">
-            <h1 class="title">InstaSearch (v2.0)</h1>
-            <p class="has-text-centered is-italic mb-5">
-                All processing is done locally in your browser. No data is uploaded to any server.
-            </p>
-            <div class="buttons is-centered mb-5">
-                <button id="darkModeToggle" class="button is-light">
-                    <span class="icon"><i class="fas fa-moon"></i></span>
-                    <span>Dark Mode</span>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    <span class="logo-text">Instasearch</span>
+                </div>
+                <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"/>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                    </svg>
+                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
                 </button>
             </div>
-            <div class="field">
-                <div class="file is-boxed is-fullwidth" id="fileDropZone">
-                    <label class="file-label">
-                        <input class="file-input" type="file" id="fileInput" multiple accept=".html">
-                        <span class="file-cta">
-                            <span class="file-icon">
-                                <i class="fas fa-upload"></i>
-                            </span>
-                            <span class="file-label">
-                                Drag & Drop HTML Files or Click to Upload
-                            </span>
-                        </span>
-                    </label>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Hero Section -->
+            <section class="hero" id="heroSection">
+                <div class="hero-content">
+                    <h1 class="hero-title">Search your Instagram messages</h1>
+                    <p class="hero-subtitle">Privacy-first. All processing happens locally in your browser.</p>
+
+                    <!-- Upload Zone -->
+                    <div class="upload-zone" id="uploadZone">
+                        <input type="file" id="fileInput" class="file-input" multiple accept=".html" aria-label="Upload HTML files">
+                        <div class="upload-content">
+                            <div class="upload-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                            </div>
+                            <p class="upload-text">Drop your Instagram HTML files here</p>
+                            <p class="upload-hint">or click to browse</p>
+                        </div>
+                    </div>
+
+                    <div class="privacy-badge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        <span>100% Local Processing</span>
+                    </div>
                 </div>
-            </div>
-            <div class="field has-addons">
-                <div class="control is-expanded">
-                    <input class="input" type="text" id="searchInput" placeholder="Search messages...">
+            </section>
+
+            <!-- Search Section -->
+            <section class="search-section" id="searchSection">
+                <div class="search-container">
+                    <div class="search-box">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <path d="M21 21l-4.35-4.35"/>
+                        </svg>
+                        <input
+                            type="text"
+                            id="searchInput"
+                            class="search-input"
+                            placeholder="Search messages..."
+                            aria-label="Search messages"
+                        >
+                        <button class="search-clear" id="clearSearch" aria-label="Clear search">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="search-meta" id="searchMeta">
+                        <span class="message-count" id="messageCount">0 messages loaded</span>
+                        <span class="search-stats" id="searchStats"></span>
+                    </div>
                 </div>
-                <div class="control">
-                    <button class="button is-info" id="clearSearch">
-                        <span class="icon"><i class="fas fa-times"></i></span>
-                        <span>Clear</span>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection">
+                <div class="results-container">
+                    <!-- Loading State -->
+                    <div class="loading-state" id="loadingState">
+                        <div class="spinner"></div>
+                        <p>Searching...</p>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div class="empty-state" id="emptyState">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="11" cy="11" r="8"/>
+                            <path d="M21 21l-4.35-4.35"/>
+                        </svg>
+                        <p>Start typing to search your messages</p>
+                    </div>
+
+                    <!-- No Results State -->
+                    <div class="no-results-state" id="noResultsState">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M16 16s-1.5-2-4-2-4 2-4 2"/>
+                            <line x1="9" y1="9" x2="9.01" y2="9"/>
+                            <line x1="15" y1="9" x2="15.01" y2="9"/>
+                        </svg>
+                        <p>No messages found</p>
+                        <span>Try different keywords</span>
+                    </div>
+
+                    <!-- Results List -->
+                    <div class="results-list" id="resultsList"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Context Modal -->
+        <div class="modal-overlay" id="contextModal">
+            <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+                <div class="modal-header">
+                    <h2 id="modalTitle" class="modal-title">Message Context</h2>
+                    <button class="modal-close" id="closeModal" aria-label="Close modal">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
                     </button>
                 </div>
+                <div class="modal-body" id="contextMessages"></div>
             </div>
-            <div id="searchStats" class="has-text-centered mt-2"></div>
-            <div id="status" class="mt-3"></div>
-            <div id="loadingIndicator" class="has-text-centered mt-3" style="display: none;">
-                <button class="button is-loading is-light is-large">Searching...</button>
-            </div>
-            <div id="results" class="mt-5"></div>
         </div>
-    </section>
-    <div class="modal" id="contextModal">
-        <div class="modal-background"></div>
-        <div class="modal-content">
-            <button class="delete" aria-label="close" id="closeModal"></button>
-            <div id="contextMessages"></div>
-        </div>
-        <button class="modal-close is-large" aria-label="close" id="closeModalBackground"></button>
+
+        <!-- Toast Container -->
+        <div class="toast-container" id="toastContainer"></div>
+
+        <!-- Add More Files Button (appears after upload) -->
+        <button class="fab" id="addMoreFiles" aria-label="Add more files">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+        </button>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
